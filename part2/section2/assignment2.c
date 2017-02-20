@@ -6,9 +6,11 @@
 #include <limits.h> // LLONG_MAX
 
 
-#define DEBUG_WORKLOAD        1
+#define DEBUG_WORKLOAD        0
 #define DEBUG_SELECT_TASK     0
-#define ENERGY_OPT_1          1
+#define ENERGY_OPT_1          0
+#define ENERGY_OPT_2          0
+#define ENERGY_OPT_3          1
 
 // Note: Deadline of each workload is defined in the "workloadDeadlines" variable.
 // i.e., You can access the dealine of the BUTTON thread using workloadDeadlines[BUTTON]
@@ -21,7 +23,6 @@
 // - Parameters
 // sv: The variable which is shared for every function over all threads
 void learn_workloads(SharedVariable* sv) {
-  // TODO: Fill the body
   // This function is executed before the scheduling simulation.
   // You need to calculate the execution time of each thread here.
 
@@ -36,7 +37,6 @@ void learn_workloads(SharedVariable* sv) {
   long long last_deadline;
 
   // First get workloads at max frequency
-  printDBG("Setting MAX FREQUENCY---------------------\n", finishTime - startTime);
   set_by_max_freq();
 
   startTime = get_current_time_us();
@@ -111,9 +111,6 @@ void learn_workloads(SharedVariable* sv) {
     printDBG("thread_buzzer time (us): %lld \n", finishTime - startTime);
   }
     
-  
-  printDBG("Setting MIN FREQUENCY---------------------\n", finishTime - startTime);
-
   // Then get workloads at min frequency
   set_by_min_freq();
 
@@ -188,6 +185,7 @@ void learn_workloads(SharedVariable* sv) {
   if(DEBUG_WORKLOAD) {
     printDBG("thread_buzzer time (us): %lld \n", finishTime - startTime);
   }
+  
   int i; 
 
   if(DEBUG_WORKLOAD) {
@@ -223,8 +221,8 @@ TaskSelection select_task(SharedVariable* sv, const int* aliveTasks, long long i
   int earliest_task;
 
   for(i = 0; i < NUM_TASKS; i++) {
-    //printDBG("aliveTasks[%d] = %d\n", i, aliveTasks[i]);
     if(aliveTasks[i] == 1) {
+
       // Check if we have a new earlier deadline
       if(workloadDeadlines[i] < earliest_deadline) {
         // If so, set it to the highest priority task
@@ -236,9 +234,6 @@ TaskSelection select_task(SharedVariable* sv, const int* aliveTasks, long long i
 
   long long elapsed_time = get_scheduler_elapsed_time_us();
 
-
-  printDBG("Picking task %d with deadline %lld\n", earliest_task, earliest_deadline);
-
   // The retun value can be specified like this:
   TaskSelection sel;
   
@@ -246,13 +241,40 @@ TaskSelection select_task(SharedVariable* sv, const int* aliveTasks, long long i
   sel.task = earliest_task; 
 
   // Request the maximum frequency (if you want the minimum frequency, use 0 instead.)
+  sel.freq = 1;
+
   if(ENERGY_OPT_1) {
-    if(elapsed_time + sv->min_workloads[earliest_task] < workloadDeadlines[earliest_task]) {
-      //printDBG("earliest_task %d, SETTING MIN FREQ!\n", earliest_task);
+    if(elapsed_time + sv->min_workloads[earliest_task] <
+              workloadDeadlines[earliest_task]) {
       sel.freq = 0;
     }
     else {
       sel.freq = 1;
+    }
+  }
+
+  if(ENERGY_OPT_2) {
+    sel.freq = 0;
+  }
+
+  // Final energy optimization
+  if(ENERGY_OPT_3) {
+    // Check if task has expired or just arrived
+    if(sv->elapsed_time[earliest_task] <= 0) {
+      sv->elapsed_time[earliest_task] = sv->min_workloads[earliest_task];
+    }
+
+    // Check if we can still execute the task at minimum frequency before the deadline
+    if(sv->elapsed_time[earliest_task] + elapsed_time < workloadDeadlines[earliest_task]) {
+      sel.freq = 0;
+      // Subtract 10000 (10 ms) from elapsed time because workload is based on minimum frequency
+      sv->elapsed_time[earliest_task] -= 10000;
+    }
+    else {
+      sel.freq = 1;
+      
+      // Subtract 20000 (20 ms) from elapsed time because workload is based on minimum frequency
+      sv->elapsed_time[earliest_task] -= 20000;
     }
   }
 

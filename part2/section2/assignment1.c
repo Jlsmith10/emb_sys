@@ -3,8 +3,6 @@
 #include <wiringPi.h>
 #include <softPwm.h>
 #include <stdint.h>
-#include "scheduler.h"
-#include "workload.h"
 #define DEBUG          0 // Debug flag
 
 int button_debouce_time = 2500;
@@ -13,11 +11,15 @@ void init_shared_variable(SharedVariable* sv) {
   // You can initialize the shared variable if needed.
   sv->bProgramExit = 0;
   sv->state = STATE_INITIAL;
+  sv->temp_high;
+  sv->touch_hit;
+  sv->last_button_press;
 }
 
 void init_sensors(SharedVariable* sv) {
-  if(DEBUG) 
-    printDBG("Initializing sensors...\n");
+  if(DEBUG) {
+    printf("Initializing sensors...\n");
+  }
 
   pinMode(PIN_BUTTON, INPUT);
   pinMode(PIN_YELLOW, OUTPUT);
@@ -36,34 +38,42 @@ void init_sensors(SharedVariable* sv) {
 
 
   sv->state = STATE_INITIAL;
-  sv->button_prev = 1;
   sv->temp_high = 0;
   sv->touch_hit = 0;
   sv->last_button_press = 0;
-
+  int i;  
+  
+  for(i = 0; i < 8; i++) {
+   sv->min_counts[i] = 0;
+   sv->max_counts[i] = 0;
+   sv->min_time[i] = 0;
+   sv->max_time[i] = 0;
+   sv->elapsed_time[i] = 0; 
+  }
 }
 
 void body_button(SharedVariable* sv) {
   static int button_count = 0;
+  static int button_prev = 0;
 
   // Debugging state info
   if(DEBUG) {
     switch(sv->state) {
       case STATE_INITIAL:
-        printDBG("STATE = STATE_INITIAL\n");
+        fprintf(stderr, "STATE = STATE_INITIAL\n");
         break;
       case STATE_TRACK:
-        printDBG("STATE = STATE_TRACK\n");
+        fprintf(stderr, "STATE = STATE_TRACK\n");
         break;
       case STATE_TOUCH:
-        printDBG("STATE = STATE_TOUCH\n");
+        fprintf(stderr, "STATE = STATE_TOUCH\n");
         break;
       case STATE_DRIVING:
-        printDBG("STATE = STATE_DRIVING\n");
+        fprintf(stderr, "STATE = STATE_DRIVING\n");
         break;
       default:
-        printDBG("STATE = UNDEFINED, exiting program\n");
-        //sv->bProgramExit = 1;
+        fprintf(stderr, "STATE = UNDEFINED, exiting program\n");
+        sv->bProgramExit = 1;
         break;
     }
   }
@@ -72,38 +82,45 @@ void body_button(SharedVariable* sv) {
   switch(sv->state) {
     case STATE_INITIAL:
       if(digitalRead(PIN_BUTTON) == LOW){
-        printDBG("BUTTON: Button pressed!\n");
-        if(sv->button_prev == 1) {
-          sv->button_prev = 0;
-          /*
-             if(millis() - button_debouce_time > sv->last_button_press) {
-             sv->state = STATE_DRIVING;
-             sv->last_button_press = millis();
-             }
-             */
-          sv->state = STATE_DRIVING;
+        //fprintf(stderr, "BUTTON: Button pressed!\n");
+        if(button_prev == 1) {
+          if(button_count == BUTTON_DEBOUNCE_COUNT) {
+            sv->state = STATE_DRIVING;
+          }
+
+          button_count++;
         }
         else {
-          sv->button_prev = 1;
+          button_prev = 1;
+          button_count = 0;
         }
+      }
+      else {
+        button_prev = 0;
       }
       break;
 
     case STATE_TRACK:
     case STATE_TOUCH:
     case STATE_DRIVING:
-      if(digitalRead(PIN_BUTTON) == LOW) {
-        if(sv->button_prev == 1) {
-          sv->button_prev = 0;
-          if(millis() - button_debouce_time > sv->last_button_press) {
+       if(digitalRead(PIN_BUTTON) == LOW){
+        //fprintf(stderr, "BUTTON: Button pressed!\n");
+        if(button_prev == 1) {
+          if(button_count == BUTTON_DEBOUNCE_COUNT) {
             sv->state = STATE_INITIAL;
-            sv->last_button_press = millis();
           }
+
+          button_count++;
         }
         else {
-          sv->button_prev = 1;
+          button_prev = 1;
+          button_count = 0;
         }
       }
+      else {
+        button_prev = 0;
+      }
+      
       break;
 
     default:
@@ -147,7 +164,7 @@ void body_temp(SharedVariable* sv) {
 
     case STATE_DRIVING:
       if(digitalRead(PIN_TEMP) == HIGH) {
-        printf("TEMP HIGH!\n");
+        //printf("TEMP HIGH!\n");
         sv->temp_high = 1;
       } else {
         sv->temp_high = 0;
@@ -182,7 +199,7 @@ void body_track(SharedVariable* sv) {
 
     case STATE_TRACK:
       // Do nothing
-
+      
       break;
 
     case STATE_TOUCH:
@@ -190,7 +207,7 @@ void body_track(SharedVariable* sv) {
       break;
 
     default:
-      printDBG("TWO_COLOR: State variable corrupted\n");
+      //fprintf(stderr, "TWO_COLOR: State variable corrupted\n");
       //      sv->bProgramExit = 1;
       break;
   }
@@ -275,7 +292,9 @@ void body_aled(SharedVariable* sv) {
 
     case STATE_DRIVING:
       if(sv->temp_high == 1) {
-        printf("Setting ALED to high\n");
+        if(DEBUG) {
+          printf("Setting ALED to high\n");
+        }
         digitalWrite(PIN_ALED, HIGH);
       }
       else {
@@ -292,7 +311,7 @@ void body_aled(SharedVariable* sv) {
       break;
 
     default:
-      //fprintf("TWO_COLOR: State variable corrupted\n");
+      //fprintf(stderr, "TWO_COLOR: State variable corrupted\n");
       //sv->bProgramExit = 1;
       break;
   }

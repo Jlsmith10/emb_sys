@@ -36,6 +36,8 @@
 #define STATE_TRACK      2
 #define STATE_TOUCH      3
 
+#define BUTTON_DEBOUNCE_COUNT     10
+
 // B. Shared structure
 // All thread fuctions get a shared variable of the structure
 // as the function parameter.
@@ -43,13 +45,16 @@
 typedef struct shared_variable {
 	int bProgramExit; // Once it is set to 1, the program will be terminated.
   int state;
-  int button_prev;
   int temp_high;
   int touch_hit;  
   int last_button_press;
-  int max_workloads[8];
   int min_workloads[8];
-
+  int max_workloads[8];
+  int min_counts[8];
+  int max_counts[8];
+  long long int min_time[8];
+  long long int max_time[8];
+  long long int elapsed_time[8];
 } SharedVariable;
 
 

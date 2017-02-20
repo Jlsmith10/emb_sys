@@ -19,6 +19,7 @@
 #include "governor.h"
 
 #define TIME_SELECT_TASK    0
+#define COUNT_DEBUG         1
 
 #define thread_def(NAME) \
 int bExit_##NAME; \
@@ -62,7 +63,7 @@ int main(int argc, char* argv[]) {
 
 	// Initialize for the interfaces provided
 	signal(SIGINT, signal_handler);
-	init_deferred_buffer(1024); // 1MB
+	init_deferred_buffer(1024 * 1024); // 1MB
 	init_userspace_governor();
 	init_workload();
 
@@ -73,25 +74,26 @@ int main(int argc, char* argv[]) {
 
 	// Init scheduler
 	int aliveTasks[NUM_TASKS];
+  int i;
 	init_scheduler(runningTimeInSec);
 	set_by_max_freq(); // reset to the max freq
 
 	printDBG("Start Scheduling with %d threads\n", NUM_TASKS);
 	TaskSelection sel;
-	long long idleTime;
+	long long idleTime, totalIdle = 0;
 
 	while (v.bProgramExit != 1) {
 		// 1. Prepare tasks
 		idleTime = prepare_tasks(aliveTasks, &v);
-		if (idleTime < 0)
+    totalIdle += idleTime;
+		
+    if (idleTime < 0)
 			break;
 
+    startTime = get_current_time_us();
 		// 2. Select a process: You need to implement.
     if(TIME_SELECT_TASK) {
-      startTime = get_current_time_us();
-      
       sel = select_task(&v, aliveTasks, idleTime); 
-
       finishTime = get_current_time_us();
       printDBG("select task time (us): %lld \n", finishTime - startTime);
     }
@@ -102,21 +104,61 @@ int main(int argc, char* argv[]) {
 		if (sel.task < 0)
 			break;
 
-    if(sel.freq == 0) {
-      min_freq_count++;
-    }
-    else {
-      max_freq_count++;
-    }
-
+    startTime = get_current_time_us();
 		// 3. Run the selected task
 		execute_task(sel);
+
+    finishTime = get_current_time_us();
+    
+    if(sel.freq == 0) {
+      v.min_counts[sel.task] = v.min_counts[sel.task] + 1;
+      v.min_time[sel.task] = v.min_time[sel.task] + finishTime - startTime;
+    }
+    else {
+      v.max_counts[sel.task] = v.max_counts[sel.task] + 1;
+      v.max_time[sel.task] = v.max_time[sel.task] + finishTime - startTime;
+    }
+    /* 
+    int alive = 0;
+
+    for(i = 0; i < NUM_TASKS; i++) {
+      if(aliveTasks[i] == 1) {
+        alive++;
+      }
+    }
+
+    if(alive == 0) {
+      printf("NO TASKS REMAINING!\n\n");
+      v.bProgramExit = -1;
+    }
+    */
 	}
 
 	finish_workload();
 	release_buffer(fileno(stdout));
+
 	printf("Scheduler program finished.\n");
-  printf("max_freq_count = %d, min_freq_count = %d\n", min_freq_count, max_freq_count);
+
+  if(COUNT_DEBUG) {
+    for(i = 0; i < NUM_TASKS; i++) {
+      //printf("Task %d: \n", i);
+      /*
+      printf("Max Frequency Count: %d,  time: %lld\n", v.max_counts[i], v.max_time[i]);
+      
+      printf("Min Frequency Count: %d,  time: %lld\n", v.min_counts[i], v.min_time[i]);
+      */
+      printf("%lld\n", v.max_time[i]);
+      
+      printf("%lld\n", v.min_time[i]);
+
+    }
+  }
+
+  //printf("Total elapsed time: %lld\n", get_scheduler_elapsed_time_us());
+  //printf("Total idle time: %lld\n", totalIdle);
+
+  printf("%lld\n", get_scheduler_elapsed_time_us());
+  printf("%lld\n", totalIdle);
 
 
 	return 0;
