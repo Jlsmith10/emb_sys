@@ -33,6 +33,7 @@ void learn_workloads(SharedVariable* sv) {
   // thread_button();
   //
   long long startTime, finishTime;
+  long long last_deadline;
 
   // First get workloads at max frequency
   printDBG("Setting MAX FREQUENCY---------------------\n", finishTime - startTime);
@@ -209,7 +210,6 @@ void learn_workloads(SharedVariable* sv) {
 // - Return value
 // TaskSelection structure which indicates the scheduled task and the CPU frequency
 TaskSelection select_task(SharedVariable* sv, const int* aliveTasks, long long idleTime) {
-  // TODO: Fill the body
   // This function is executed inside of the scheduling simulation.
   // You need to implement an energy-efficient EDF (Earliest Deadline First) scheduler.
 
@@ -230,7 +230,6 @@ TaskSelection select_task(SharedVariable* sv, const int* aliveTasks, long long i
         // If so, set it to the highest priority task
         earliest_deadline = workloadDeadlines[i];
         earliest_task = i;
-
       }
     }
   }
@@ -238,7 +237,7 @@ TaskSelection select_task(SharedVariable* sv, const int* aliveTasks, long long i
   long long elapsed_time = get_scheduler_elapsed_time_us();
 
 
-  //printDBG("Picking task %d with deadline %lld\n", earliest_task, earliest_deadline);
+  printDBG("Picking task %d with deadline %lld\n", earliest_task, earliest_deadline);
 
   // The retun value can be specified like this:
   TaskSelection sel;
